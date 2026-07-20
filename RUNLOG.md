@@ -65,3 +65,12 @@ duplicate arrives by `20ms + d`, so 110 fully covers hidden one-way delay up to 
 covers only 85ms, and the beyond-envelope F_jitter profile (95ms) sits exactly at the 1% gate at
 110 (runs 20, 28). Grading profiles are unseen with "different jitter behavior"; 5ms of score is
 the cheapest insurance available against an entire failure mode.
+
+**Post-decision stress battery — hidden-profile shapes (all at 110):**
+
+| # | profile | delay_ms | miss % | overhead | result | change / why |
+|---|---------|----------|--------|----------|--------|--------------|
+| 29 | G_mix seed 1 (bursts + spikes + jitter combined, ~4.4% effective loss) | 110 | 0.87% | 1.97× | VALID | the most realistic "hidden profile" shape — every impairment type at once. |
+| 30 | G_mix seed 2 | 110 | 0.67% | 1.97× | VALID | ditto, second seed. |
+| 31 | H_highloss (7% flat loss) | 110 | 1.27% | 1.97× | INVALID | the loss cliff, measured: at 7% even perfect full-dup leaves ~0.5% (p²) and our ~8% coverage gap adds ~0.56%. Envelope edge ≈6% flat loss — fundamental to the 2.0× budget, not a tuning miss. |
+| 32 | I_dupstorm (8% relay dup rate) | 110 | 0.33% | 1.97× | VALID | dedup handles duplicate storms; relay-created dups are free extra redundancy. |

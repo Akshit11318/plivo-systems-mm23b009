@@ -1,8 +1,8 @@
 // RECEIVER — dedup + instant forward + gap-triggered NACKs. C++20, stdlib only.
 //
 // Ports (all 127.0.0.1):
-//   bind 47002  <- media from sender, via hostile relay (164B: u32 BE seq + payload)
-//   send 47020  -> harness player, verbatim (our media format == harness format)
+//   bind 47002  <- media from sender, via hostile relay (162B: u16 BE seq + payload)
+//   send 47020  -> harness player (164B: u32 BE seq rebuilt + payload)
 //   send 47003  -> NACK feedback to sender, via relay
 //
 // NO jitter buffer: the player scores the FIRST arrival of each seq against

@@ -2,7 +2,7 @@
 //
 // Ports (all 127.0.0.1):
 //   bind 47010  <- harness source, frame i at t0+i*20ms (4B BE seq + 160B payload)
-//   send 47001  -> relay uplink (our wire format = same 164B datagram)
+//   send 47001  -> relay uplink (our wire: 162B = u16 BE seq + payload)
 //   bind 47004  <- NACK feedback from receiver, via relay
 //
 // Layers (priority when budget is tight: original > retransmit > duplicate):
