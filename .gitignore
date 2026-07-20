@@ -1,0 +1,35 @@
+# Python virtual environment (huge, machine-specific)
+env/
+
+# Secrets - real API tokens live in these
+.env
+.mcp.json
+
+# Personal/local tool config, not project source
+.claude/
+.agents/
+skills-lock.json
+commands.md
+
+# Supabase local/CLI state (unrelated side project in this dir)
+supabase/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# --- Flaky Network assignment (systems_handout/) ---
+# Build artifacts (make -> ./sender ./receiver)
+systems_handout/sender
+systems_handout/receiver
+systems_handout/*.o
+
+# Per-run generated output, not source
+systems_handout/relay_stats.json
+systems_handout/playout_log.json
+
+# Raw zip handout - contents already extracted into systems_handout/
+systems_handout.zip
