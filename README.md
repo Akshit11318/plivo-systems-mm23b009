@@ -4,14 +4,14 @@ Sender/receiver pair that carries a 160-byte-per-20ms live stream across a hosti
 (drops, jitter, reordering, duplication, burst loss) with ≤1% deadline misses and ≤2.0×
 bandwidth, at the lowest possible playout delay.
 
-**Grade at `delay_ms = 110`** (see NOTES.md).
+**Grade at `delay_ms = 108`** (see NOTES.md).
 
 ## Build & run
 
 ```bash
 make                                                   # -> ./sender ./receiver (C++20, stdlib only)
 python3 run.py --profile profiles/A.json --delay_ms 60
-python3 run.py --profile profiles/B.json --delay_ms 110
+python3 run.py --profile profiles/B.json --delay_ms 108
 ```
 
 ## Layout

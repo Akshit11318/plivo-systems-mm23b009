@@ -74,3 +74,12 @@ the cheapest insurance available against an entire failure mode.
 | 30 | G_mix seed 2 | 110 | 0.67% | 1.97× | VALID | ditto, second seed. |
 | 31 | H_highloss (7% flat loss) | 110 | 1.27% | 1.97× | INVALID | the loss cliff, measured: at 7% even perfect full-dup leaves ~0.5% (p²) and our ~8% coverage gap adds ~0.56%. Envelope edge ≈6% flat loss — fundamental to the 2.0× budget, not a tuning miss. |
 | 32 | I_dupstorm (8% relay dup rate) | 110 | 0.33% | 1.97× | VALID | dedup handles duplicate storms; relay-created dups are free extra redundancy. |
+
+**Post-submission-prep fine sweep — final stated number revised 110 → 108.** A synthetic
+"blackbox" profile (burst-dominated ~5% loss + 12–85ms jitter + 1.5%×45ms spikes + 3% dup,
+deliberately shaped like nothing we tuned on) was swept 90→130: INVALID ≤103, exactly 1.00% at
+104, flat 0.93% from 105 up — more delay buys nothing past the knee. Decision rule: knee (105)
++ 3ms buffer = **108**. Known trade-off, recorded honestly: one adversarial seed of that same
+blackbox measures 1.20% at 108 (seed-level variance at the envelope edge, not delay-fixable —
+its curve is flat), and profiles with one-way jitter >88ms lose the last 2ms of dup headroom
+versus 110. Accepted in exchange for a 2ms better score on every valid run.
