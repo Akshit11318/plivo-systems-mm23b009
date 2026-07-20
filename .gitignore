@@ -36,3 +36,6 @@ systems_handout.zip
 
 # Private engineering log (Haiku agent maintains; local reference only)
 CHANGELOG.local.md
+
+# Private animated protocol explainer, local reference only
+proto.html
