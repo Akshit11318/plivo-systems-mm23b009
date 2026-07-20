@@ -33,3 +33,6 @@ systems_handout/playout_log.json
 
 # Raw zip handout - contents already extracted into systems_handout/
 systems_handout.zip
+
+# Private engineering log (Haiku agent maintains; local reference only)
+CHANGELOG.local.md
