@@ -234,6 +234,7 @@ those 300 lines.
   <ol>
     <li><a href="#problem">The problem &amp; the scoring function</a></li>
     <li><a href="#architecture">Architecture: the five hops and the feedback loop</a></li>
+    <li><a href="#frame-life">The protocol, told as the life of a frame</a></li>
     <li><a href="#layers">Three recovery layers, and why each one exists</a></li>
     <li><a href="#insights">Four load-bearing insights (verified, not assumed)</a></li>
     <li><a href="#wire">Wire formats</a></li>
@@ -341,7 +342,64 @@ losing the media packet it refers to — the feedback path fails on its own sche
 NACKs are re-sent (below) instead of trusted to arrive once.
 </p>
 
-<h2 id="layers"><span class="num">3.</span>Three recovery layers, and why each one exists</h2>
+<h2 id="frame-life"><span class="num">3.</span>The protocol, told as the life of a frame</h2>
+
+<p>Follow frame #472 through its life.</p>
+
+<p>
+<b>t=0ms — birth.</b> The harness source hands the sender frame 472 (164B: seq + payload). The sender
+cannot send early — this frame is all it has.
+</p>
+
+<p>
+<b>t=0ms — copy 1, instantly.</b> The sender repacks to the lean wire format (162B: u16 seq +
+payload) and fires it at the relay the same instant it arrives. If the network is kind, this copy
+wins with zero added latency.
+</p>
+
+<p>
+<b>t=0ms — two decoys follow.</b> Two 1-byte chaff packets go out behind it. They carry nothing;
+they exist because the relay's burst-loss state machine rolls its dice once per packet received,
+regardless of size. Chaff makes the relay's "bad mood" clock tick faster between the frame's two
+real copies.
+</p>
+
+<p>
+<b>t=20ms — copy 2 rides with the next frame.</b> When frame 473 arrives, the sender re-sends 472
+as a separate packet. On the lane the order is [473][chaff][chaff][472-again], so 472's two copies
+sit ~7 dice-rolls apart — a burst that swallowed copy 1 has usually ended before copy 2 walks
+through. The frame now survives unless both copies independently die: probability ~p² instead of
+p (0.25% vs 5% on profile B).
+</p>
+
+<p>
+<b>Receiver — no waiting, ever.</b> Whichever copy arrives first: check a seen-bit, rebuild the
+harness's u32 header, forward to the player in microseconds; late duplicates dropped silently.
+Deliberately no jitter buffer, because the scorer records the first correct arrival and only asks
+"before the deadline?" — holding frames to play them "smoothly" would be donating latency. All
+smoothing lives in <code>delay_ms</code> itself.
+</p>
+
+<p>
+<b>The rare disaster — both copies die.</b> The receiver notices the sequence hole when 473
+arrives, checks whether a rescue can still beat 472's deadline (<code>T0 + DELAY_MS +
+472·20ms</code>, known from env), and if yes sends a NACK; the sender re-checks reachability and
+retransmits. If the frame is already dead, neither side spends a byte on it.
+</p>
+
+<div class="callout">
+<b>The accountant above it all.</b> Every optional packet (duplicate, retransmit, chaff) must pass
+the byte governor: <code>bytes_sent + packet &le; 1.96 &times; 160 &times; frames_seen</code> —
+counted identically to how the relay counts, so the 2.0&times; cap cannot be violated, only
+approached. Under pressure the priority is original &gt; retransmit &gt; duplicate.
+</div>
+
+<p class="lede">
+Three chances per frame, each cheaper and rarer than the last; zero added latency on the happy
+path; a hard budget that cannot be exceeded.
+</p>
+
+<h2 id="layers"><span class="num">4.</span>Three recovery layers, and why each one exists</h2>
 
 <h3>Layer 1 — immediate forward (zero-latency copy)</h3>
 <p>
@@ -408,7 +466,7 @@ sending it is pure waste of the byte budget that layer 2 needs. Checking
 attempts that are provably useless.
 </div>
 
-<h2 id="insights"><span class="num">4.</span>Four load-bearing insights (verified, not assumed)</h2>
+<h2 id="insights"><span class="num">5.</span>Four load-bearing insights (verified, not assumed)</h2>
 
 <p>Each of the following is a decision that materially shapes the architecture. None of them are
 taken from the PDF's prose alone — each is checked against the harness source that actually runs
@@ -516,7 +574,7 @@ misses fell from 4.47% to 2.33% the run this shipped.
 </div>
 </div>
 
-<h2 id="wire"><span class="num">5.</span>Wire formats</h2>
+<h2 id="wire"><span class="num">6.</span>Wire formats</h2>
 
 <table>
 <tr><th>Type</th><th>Layout</th><th>Size</th><th>Notes</th></tr>
@@ -546,7 +604,7 @@ misses fell from 4.47% to 2.33% the run this shipped.
 </tr>
 </table>
 
-<h2 id="systems"><span class="num">6.</span>Systems-level implementation</h2>
+<h2 id="systems"><span class="num">7.</span>Systems-level implementation</h2>
 
 <div class="kv">
   <dt>Concurrency model</dt><dd>single thread per process, nonblocking <code>poll()</code>, 5ms tick
@@ -582,7 +640,7 @@ misses fell from 4.47% to 2.33% the run this shipped.
     the intended priority order without needing a separate reservation scheme.</dd>
 </div>
 
-<h2 id="results"><span class="num">7.</span>Results</h2>
+<h2 id="results"><span class="num">8.</span>Results</h2>
 
 <p>Methodology: sweep <code>delay_ms</code> downward on profile A and profile B until the mechanism
 fails one of the two gates, then confirm the surviving floor against synthetic
@@ -660,7 +718,7 @@ specific shape. The graded <code>delay_ms</code> is the lowest value that clears
 </tr>
 </table>
 
-<h2 id="tradeoffs"><span class="num">8.</span>Trade-offs and what breaks it</h2>
+<h2 id="tradeoffs"><span class="num">9.</span>Trade-offs and what breaks it</h2>
 
 <p>
 <code>delay_ms</code> is not picked to fit profile A or B specifically — hidden grading profiles
