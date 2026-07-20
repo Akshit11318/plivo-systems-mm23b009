@@ -28,6 +28,10 @@ static constexpr int PKT = 4 + PAYLOAD;      // u32 BE seq + payload = 164B
 static constexpr int RING = 1024;            // recent frames kept for dup/retx
 static constexpr double CAP_UP = 1.93;       // uplink cap, x raw bytes
 static constexpr double MIN_UP_S = 0.005;    // min plausible relay one-way delay
+static constexpr int CHAFF_N = 3;            // 1-byte packets between the two
+// copies of a frame: the relay's burst-loss Markov chain advances once per
+// packet RECEIVED on the lane (relay.py Impair.drop), so chaff pushes the
+// copies ~9 chain-steps apart for ~3 bytes/frame -> bursts rarely span both.
 
 static double now_s() {
     timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
@@ -85,10 +89,15 @@ int main() {
             ssize_t n;
             while ((n = recv(src_fd, buf, sizeof buf, MSG_DONTWAIT)) > 0) {
                 if (n != PKT) continue;
-                send_dup_of_last();                // layer 2: dup of frame i-1
                 uint32_t seq; memcpy(&seq, buf, 4); seq = ntohl(seq);
                 frames_seen++;
                 send_pkt(buf);                     // layer 1: forward now
+                for (int c = 0; c < CHAFF_N; c++) {          // advance burst chain
+                    char cb = 0x43;
+                    if (sendto(out_fd, &cb, 1, 0, (sockaddr *)&relay,
+                               sizeof relay) == 1) up_bytes += 1;
+                }
+                send_dup_of_last();                // layer 2: dup of frame i-1
                 Slot &s = ring[seq % RING];
                 s.seq = seq; s.used = true; s.dup_sent = false; s.retx = 0;
                 memcpy(s.pkt, buf, PKT);

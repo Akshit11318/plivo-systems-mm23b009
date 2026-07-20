@@ -1,0 +1,1 @@
+{"name": "D_spike", "loss": 0.03, "delay_min_ms": 20, "delay_max_ms": 90, "spike": {"prob": 0.02, "extra_ms": 40}, "dup": 0.01}
