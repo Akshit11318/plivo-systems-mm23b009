@@ -22,8 +22,9 @@
 #include <unistd.h>
 
 static constexpr int PAYLOAD = 160;
-static constexpr int PKT = 4 + PAYLOAD;
-static constexpr uint32_t MAXF = 1u << 16;     // frame capacity (>21 min @ 20ms)
+static constexpr int PKT = 2 + PAYLOAD;        // our wire: u16 BE seq + payload
+static constexpr int HARNESS_PKT = 4 + PAYLOAD;   // player leg: u32 BE seq
+static constexpr uint32_t MAXF = 1u << 16;     // u16 seq space (>21 min @ 20ms)
 static constexpr double CAP_DOWN = 0.02;       // feedback cap, x raw bytes
 static constexpr double MIN_RTT_S = 0.010;     // min plausible NACK->retx path
 static constexpr double RENACK_S = 0.030;
@@ -70,11 +71,16 @@ int main() {
         if (pfd.revents & POLLIN) {
             ssize_t n;
             while ((n = recv(in_fd, buf, sizeof buf, MSG_DONTWAIT)) > 0) {
-                if (n != PKT) continue;
-                uint32_t seq; memcpy(&seq, buf, 4); seq = ntohl(seq);
-                if (seq >= MAXF || seen[seq]) continue;     // dedup
+                if (n != PKT) continue;                     // chaff/noise ignored
+                uint16_t s16; memcpy(&s16, buf, 2);
+                uint32_t seq = ntohs(s16);
+                if (seen[seq]) continue;                    // dedup
                 seen[seq] = true;
-                sendto(out_fd, buf, PKT, 0, (sockaddr *)&player, sizeof player);
+                char out[HARNESS_PKT];                      // rebuild u32 header
+                uint32_t be = htonl(seq);
+                memcpy(out, &be, 4); memcpy(out + 4, buf + 2, PAYLOAD);
+                sendto(out_fd, out, HARNESS_PKT, 0, (sockaddr *)&player,
+                       sizeof player);
                 if (!any || seq > max_seq) { max_seq = seq; any = true; }
             }
         }

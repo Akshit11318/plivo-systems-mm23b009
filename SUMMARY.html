@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SUMMARY — The Flaky Network: Architecture &amp; Design Rationale</title>
+<style>
+  :root {
+    --ink: #1b1f24;
+    --sub: #55606b;
+    --line: #d8dee4;
+    --panel: #f6f8fa;
+    --accent: #0b5fff;
+    --hostile: #c23b22;
+    --direct: #1c7c3f;
+    --code-bg: #0f1720;
+    --code-ink: #d6e2ef;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: #fff;
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    font-size: 16px;
+  }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 40px 24px 100px;
+  }
+  code, pre, .mono, .cite, .pill {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  header.doc {
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+  }
+  header.doc h1 { margin: 0 0 6px; font-size: 1.7rem; letter-spacing: -0.01em; }
+  header.doc .meta { color: var(--sub); font-size: 0.92rem; }
+  header.doc .meta span:not(:last-child)::after { content: " · "; color: var(--line); }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin: 24px 0 36px;
+    font-size: 0.92rem;
+  }
+  nav.toc div.title { font-weight: 600; margin-bottom: 6px; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 24px; }
+  nav.toc li { margin-bottom: 4px; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  h2 {
+    font-size: 1.28rem;
+    margin: 46px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  h2 .num { color: var(--sub); font-weight: 500; margin-right: 8px; }
+  h3 { font-size: 1.05rem; margin: 26px 0 8px; }
+  p { margin: 10px 0; }
+  .lede {
+    font-size: 1.05rem;
+    color: var(--sub);
+    border-left: 3px solid var(--accent);
+    padding: 4px 16px;
+    margin: 0 0 8px;
+  }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--panel); font-weight: 600; }
+  tr.placeholder td { color: var(--sub); font-style: italic; background: #fffbea; }
+  tr.confirmed td.result-valid { color: var(--direct); font-weight: 700; }
+  tr.confirmed td.result-invalid { color: var(--hostile); font-weight: 700; }
+  .cite {
+    display: inline-block;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.8rem;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .pill {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .pill.direct { background: #e6f6ec; color: var(--direct); border: 1px solid #b6e3c6; }
+  .pill.hostile { background: #fceceb; color: var(--hostile); border: 1px solid #f2c3bd; }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.83rem;
+    line-height: 1.5;
+  }
+  pre.ascii { font-size: 0.82rem; }
+  .callout {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 0.94rem;
+  }
+  .callout.warn { border-left-color: var(--hostile); }
+  .why {
+    background: #fff;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0 16px;
+    font-size: 0.93rem;
+  }
+  .why b { color: var(--accent); }
+  .insight {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 16px 0;
+  }
+  .insight h3 { margin-top: 0; }
+  .insight .claim { font-weight: 600; margin-bottom: 6px; }
+  .insight .verify { font-size: 0.92rem; color: var(--sub); margin: 8px 0; }
+  .insight .why { margin-top: 10px; }
+  /* --- architecture diagram --- */
+  .diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 18px 0 8px;
+    padding: 18px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .diagram .box {
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 14px;
+    font-size: 0.86rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 92px;
+  }
+  .diagram .box.relay { border-color: var(--hostile); color: var(--hostile); }
+  .diagram .box .sub { display: block; font-weight: 400; font-size: 0.72rem; color: var(--sub); margin-top: 2px; }
+  .diagram .hop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 4px;
+    min-width: 74px;
+  }
+  .diagram .hop .port { font-size: 0.72rem; color: var(--sub); }
+  .diagram .hop .line { font-size: 1rem; letter-spacing: -1px; }
+  .diagram .hop .line.impaired { color: var(--hostile); }
+  .diagram .hop .line.direct { color: var(--direct); }
+  .diagram .hop .tag { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+  .diagram .hop .tag.impaired { color: var(--hostile); }
+  .diagram .hop .tag.direct { color: var(--direct); }
+  .diagram-caption { text-align: center; font-size: 0.82rem; color: var(--sub); margin: 4px 0 22px; }
+  .legend { display: flex; gap: 18px; justify-content: center; font-size: 0.8rem; color: var(--sub); margin: -4px 0 20px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .swatch { width: 22px; height: 3px; display: inline-block; }
+  .legend .swatch.direct { background: var(--direct); }
+  .legend .swatch.impaired { background: var(--hostile); }
+  footer.doc {
+    margin-top: 60px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    color: var(--sub);
+    font-size: 0.82rem;
+  }
+  .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 14px; font-size: 0.92rem; margin: 10px 0; }
+  .kv dt { color: var(--sub); }
+  .kv dd { margin: 0; }
+</style>
+</head>
+<body>
+<main>
+
+<header class="doc">
+  <h1>SUMMARY — The Flaky Network</h1>
+  <div class="meta">
+    <span>Plivo Systems Track</span>
+    <span>C++20, stdlib only, no exceptions, no heap after startup</span>
+    <span>mm23b009</span>
+    <span>2026-07-21</span>
+  </div>
+</header>
+
+<p class="lede">
+This document explains what was built, and — more importantly — why every mechanism in it exists.
+Every non-obvious claim below is checked against the harness source
+(<code>endpoints.py</code>, <code>relay.py</code>, <code>score.py</code>, <code>common.py</code>)
+rather than assumed from the PDF description. The implementation is two ~150-line C++ files
+(<code>sender.cpp</code>, <code>receiver.cpp</code>); this document is the design rationale behind
+those 300 lines.
+</p>
+
+<nav class="toc">
+  <div class="title">Contents</div>
+  <ol>
+    <li><a href="#problem">The problem &amp; the scoring function</a></li>
+    <li><a href="#architecture">Architecture: the five hops and the feedback loop</a></li>
+    <li><a href="#layers">Three recovery layers, and why each one exists</a></li>
+    <li><a href="#insights">Four load-bearing insights (verified, not assumed)</a></li>
+    <li><a href="#wire">Wire formats</a></li>
+    <li><a href="#systems">Systems-level implementation</a></li>
+    <li><a href="#results">Results</a></li>
+    <li><a href="#tradeoffs">Trade-offs and what breaks it</a></li>
+  </ol>
+</nav>
+
+<h2 id="problem"><span class="num">1.</span>The problem &amp; the scoring function</h2>
+
+<p>
+A harness <b>source</b> emits one 160-byte frame every 20ms, on the wall clock, starting at a shared
+epoch <code>T0</code>. It cannot be persuaded to send early — frame <em>i</em> is generated and
+transmitted at <code>T0 + i·20ms</code>, not before
+(<code>endpoints.py</code> <code>source()</code>, <span class="cite">endpoints.py:27–34</span>).
+Between our sender and receiver sits a <b>hostile relay</b> we cannot modify and whose impairment
+profile on the graded run we have never seen: it drops, delays (uniform between a min/max, plus an
+optional probabilistic "spike"), reorders (a direct effect of per-packet random delay), and
+duplicates packets, independently per direction, and for some profiles adds a Gilbert–Elliott
+burst-loss state machine on top of the flat per-packet loss rate
+(<code>relay.py</code> <code>Impair</code>, <span class="cite">relay.py:24–53</span>).
+</p>
+
+<p>A run is judged by two hard gates and one thing to minimize (<code>score.py</code>):</p>
+<div class="kv">
+  <dt>Miss gate</dt><dd>deadline-miss rate ≤ 1.00% — a frame misses if no packet carrying its
+    seq arrives at the player before <code>T0 + delay_ms + seq·20ms</code>.</dd>
+  <dt>Byte gate</dt><dd>total relay-crossing bytes (both directions, dropped packets still count)
+    ≤ 2.00× raw, where raw = n_frames × 160B.</dd>
+  <dt>Score</dt><dd>the stated <code>delay_ms</code> if both gates hold; lower is better; overhead
+    breaks ties.</dd>
+</div>
+<div class="callout">
+Both gates are constraints, not the objective. The actual optimization is:
+<i>find the lowest <code>delay_ms</code> for which the recovery mechanism still clears &le;1% miss,
+without the mechanism's own byte cost crossing 2.0&times;</i>. That framing — delay is a dial,
+recovery-under-a-budget is the mechanism — drives every design choice below.
+</div>
+
+<h2 id="architecture"><span class="num">2.</span>Architecture: the five hops and the feedback loop</h2>
+
+<p>Two processes, five UDP hops. The middle three hops (sender→relay→receiver) are the only ones the
+relay impairs and the only ones that count against the byte budget; the two harness-internal legs
+(source→sender, receiver→player) are direct loopback sockets outside the relay's reach
+(<code>common.py</code> port table, <span class="cite">common.py:12–18</span>).</p>
+
+<div class="diagram">
+  <div class="box">Harness<br>Source<span class="sub">endpoints.py</span></div>
+  <div class="hop">
+    <div class="port">47010</div>
+    <div class="line direct">──────▶</div>
+    <div class="tag direct">direct</div>
+  </div>
+  <div class="box">Sender<span class="sub">sender.cpp</span></div>
+  <div class="hop">
+    <div class="port">47001</div>
+    <div class="line impaired">──────▶</div>
+    <div class="tag impaired">impaired</div>
+  </div>
+  <div class="box relay">Relay<span class="sub">relay.py</span></div>
+  <div class="hop">
+    <div class="port">47002</div>
+    <div class="line impaired">──────▶</div>
+    <div class="tag impaired">impaired</div>
+  </div>
+  <div class="box">Receiver<span class="sub">receiver.cpp</span></div>
+  <div class="hop">
+    <div class="port">47020</div>
+    <div class="line direct">──────▶</div>
+    <div class="tag direct">direct</div>
+  </div>
+  <div class="box">Harness<br>Player<span class="sub">endpoints.py</span></div>
+</div>
+<div class="diagram-caption">Media path — harness legs carry 164B datagrams (4B BE u32 seq + 160B payload); the sender→receiver leg carries 162B datagrams (2B BE u16 seq + payload), rebuilt to the 164B harness format at the receiver</div>
+
+<div class="diagram">
+  <div class="box">Receiver</div>
+  <div class="hop">
+    <div class="port">47003</div>
+    <div class="line impaired">──────▶</div>
+    <div class="tag impaired">impaired</div>
+  </div>
+  <div class="box relay">Relay<span class="sub">down lane</span></div>
+  <div class="hop">
+    <div class="port">47004</div>
+    <div class="line impaired">──────▶</div>
+    <div class="tag impaired">impaired</div>
+  </div>
+  <div class="box">Sender</div>
+</div>
+<div class="diagram-caption">Feedback path — NACKs, same relay process, a <i>separate</i> Gilbert-Elliott chain (own RNG seed)</div>
+
+<div class="legend">
+  <span><i class="swatch direct"></i>direct loopback, unimpaired, not byte-capped</span>
+  <span><i class="swatch impaired"></i>through the relay: drop / delay / reorder / dup, byte-capped</span>
+</div>
+
+<p>
+The relay is one process with two independent lanes: <code>up_in</code> (sender→relay, seeded
+<code>Random(seed)</code>) and <code>dn_in</code> (receiver→relay, seeded <code>Random(seed+1)</code>),
+each with its own <code>Impair</code> instance and its own burst-loss state
+(<span class="cite">relay.py:73–78</span>). Losing a NACK is therefore statistically independent of
+losing the media packet it refers to — the feedback path fails on its own schedule, which is why
+NACKs are re-sent (below) instead of trusted to arrive once.
+</p>
+
+<h2 id="layers"><span class="num">3.</span>Three recovery layers, and why each one exists</h2>
+
+<h3>Layer 1 — immediate forward (zero-latency copy)</h3>
+<p>
+The instant a frame arrives from the harness source, the sender forwards it to the relay,
+unconditionally — it is never withheld for batching, reordering, or budget checks
+(<span class="cite">sender.cpp:94</span>). This is the only layer that can ever hit a frame's
+deadline with zero added latency, so it must never be delayed by anything else the sender is doing.
+</p>
+<div class="why"><b>Why:</b> under the profiles we're tuned against, most frames survive on the first
+try. Layers 2 and 3 exist to catch the minority that don't — they must not tax the majority that do.
+Forwarding on receipt keeps the achievable floor on <code>delay_ms</code> equal to relay transit time,
+not transit time plus some deliberate hold.</div>
+
+<h3>Layer 2 — staggered duplicate (+1 frame, a separate packet)</h3>
+<p>
+When frame <i>i+1</i> arrives (~20ms after frame <i>i</i>), the sender re-sends frame <i>i</i>'s
+exact bytes as a second, independent datagram (<span class="cite">sender.cpp:74–80,100</span>).
+It is not a retransmit triggered by evidence of loss — it is sent unconditionally, before anyone
+knows whether copy 1 survived.
+</p>
+<div class="why">
+<b>Why a second packet, not "send it twice back-to-back":</b> the relay draws its loss decision
+per <em>packet received</em>, independently, and the harder profiles layer a Gilbert-Elliott
+burst state on top of flat loss. Two packets sent back-to-back land adjacent in the
+same lane and are the packets most likely to share one burst. Staggering by a full frame period —
+and, as detailed in Insight&nbsp;4 below, deliberately spacing the two copies across the relay's
+burst-loss chain — makes the two copies' fates close to independent instead of correlated.
+Independent fates is the entire value of "send it twice"; without it, a duplicate is just wasted
+bandwidth during exactly the bursts it's meant to survive.
+</div>
+<div class="why">
+<b>Why +1 frame and not some other lag:</b> it is the earliest possible moment. The source paces
+frames at 20ms intervals (Insight&nbsp;2), so there is no way to produce "frame <i>i</i>, copy 2"
+before frame <i>i+1</i> exists. Any staggered scheme — duplicate or parity — bottoms out at this
+same +20ms floor.
+</div>
+
+<h3>Layer 3 — NACK-triggered, deadline-aware retransmit</h3>
+<p>
+The receiver tracks a sliding <code>base</code> — the lowest sequence number that might still be
+missing — and scans forward for gaps. A gap becomes a NACK
+(<code>0x4E</code> + count + seq list) only if the frame's deadline is still reachable given a
+minimum plausible feedback-then-retransmit transit time; gaps that can no longer be helped are
+skipped, not NACKed (<span class="cite">receiver.cpp:84–97</span>). Unresolved gaps are re-NACKed
+every ~30ms, up to 4 times per frame (<code>RENACK_S</code>, <code>MAX_NACKS</code>,
+<span class="cite">receiver.cpp:29–30,92</span>). On the sender side, a NACK is honored only if the
+frame is still in the 1024-slot ring, has been retransmitted fewer than 3 times, the deadline
+<code>T0 + DELAY_MS + seq·20ms</code> minus a minimum-transit margin has not passed, and the byte
+governor still has room (<span class="cite">sender.cpp:107–121</span>).
+</p>
+<div class="why">
+<b>Why bother with a third layer at all, given layers 1+2 already give two independent tries:</b>
+two tries only drives miss rate to roughly <i>p²</i> for a per-packet loss rate <i>p</i> — good, but
+not enough headroom against the harder synthetic/burst profiles where effective loss on a given
+frame is higher. A third, evidence-triggered try closes that remaining gap for exactly the frames
+that need it, at almost no byte cost (feedback is capped at 0.02× raw), instead of un-selectively
+sending a third full copy of <em>every</i> frame.
+</div>
+<div class="why">
+<b>Why deadline-aware and not "always retransmit on NACK":</b> a retransmit that arrives after the
+frame's deadline cannot help — the player has already scored it as a miss (Insight&nbsp;1) — so
+sending it is pure waste of the byte budget that layer 2 needs. Checking
+<code>t + MIN_UP_S &gt;= deadline(seq)</code> before every retransmit throws away only the
+attempts that are provably useless.
+</div>
+
+<h2 id="insights"><span class="num">4.</span>Four load-bearing insights (verified, not assumed)</h2>
+
+<p>Each of the following is a decision that materially shapes the architecture. None of them are
+taken from the PDF's prose alone — each is checked against the harness source that actually runs
+at grading time.</p>
+
+<div class="insight">
+<h3>Insight 1 — No jitter buffer, anywhere. Ever.</h3>
+<div class="claim">The player scores the FIRST arrival of each seq against its deadline, and it does
+so order-independently.</div>
+<div class="verify">
+<code>endpoints.py</code>'s <code>player()</code> keeps a dict
+<code>first_arrival = {}</code> (<span class="cite">endpoints.py:41</span>) and only records a
+seq the first time it is seen — <code>if 0 &lt;= i &lt; n_frames and i not in first_arrival</code>
+(<span class="cite">endpoints.py:52</span>) — regardless of what order packets physically arrive in.
+Scoring itself is <code>ok = arr is not None and arr[0] &lt;= deadline</code>
+(<span class="cite">endpoints.py:59</span>): first arrival time versus that frame's own deadline,
+nothing else.
+</div>
+<div class="why">
+<b>Consequence:</b> holding a correctly-arrived frame to wait for possible reordering strictly
+lowers your score — it can only turn an on-time first arrival into a late one. There is no
+reordering to protect against from the player's point of view, because it never looks at order.
+So the receiver does zero buffering: every non-duplicate packet is forwarded to the player the
+instant it is dedup-checked (<span class="cite">receiver.cpp:75–77</span>). All jitter tolerance
+in this design lives in one place — the <code>delay_ms</code> number itself — not in a buffer.
+</div>
+</div>
+
+<div class="insight">
+<h3>Insight 2 — FEC rejected from first principles, not from a hunch</h3>
+<div class="claim">XOR parity across {frame <i>i</i>, frame <i>i+1</i>} cannot exist any earlier
+than our staggered duplicate does, and it recovers with strictly lower probability for the same
+latency.</div>
+<div class="verify">
+<code>source()</code> sleeps until <code>t0 + i·FRAME_MS/1000</code> before sending frame
+<i>i</i> (<span class="cite">endpoints.py:29–34</span>) — frames are paced, not batch-released. A
+parity packet <code>P = frame(i) XOR frame(i+1)</code> is therefore only computable once frame
+<i>i+1</i> exists, i.e. at <code>T0+(i+1)·20ms</code> — the exact same instant our staggered
+duplicate is already sent (Layer 2). Latency is tied.
+</div>
+<div class="why">
+<b>Probability is not tied.</b> Recovering a lost frame <i>i</i> from parity needs <em>both</em>
+remaining group members to survive — <code>frame(i+1)</code> and <code>P</code> — a 2-survivor
+requirement with probability <code>(1-p)²</code> under independent per-packet loss <i>p</i>.
+Recovering from a plain duplicate needs only the duplicate itself to survive: a 1-survivor
+requirement, probability <code>(1-p)</code>. Since <code>(1-p) &gt; (1-p)²</code> for any
+<code>0&lt;p&lt;1</code>, the duplicate dominates FEC at equal latency and comparable byte cost.
+FEC would only start to look attractive if it could be sent earlier than +20ms — and pacing
+forbids that categorically, not just in practice.
+</div>
+</div>
+
+<div class="insight">
+<h3>Insight 3 — the 2.0&times; byte cap is unbreakable by construction, not by luck</h3>
+<div class="claim">The sender's own byte ledger and the relay's byte ledger count the identical
+bytes, so a hard self-imposed cap below 2.0&times; provably keeps the scored overhead below
+2.0&times; — this isn't a statistical bet.</div>
+<div class="verify">
+The relay increments <code>stats[f"{lane}_bytes"] += len(data)</code> the moment it receives a
+datagram on a lane, <em>before</em> deciding whether to drop it (<span class="cite">relay.py:96–101</span>)
+— dropped bytes still count, exactly as the PRD assumes. On loopback there is no OS-level UDP loss
+between our socket and the relay's socket, so "bytes the sender's <code>sendto()</code> reports as
+sent" and "bytes the relay's <code>recvfrom()</code> reports as received" are the same number.
+The sender checks <code>up_bytes + PKT &lt;= CAP_UP · PAYLOAD · frames_seen</code>
+<em>before</em> every optional send (<span class="cite">sender.cpp:66–69</span>), and the receiver
+runs the symmetric check against <code>CAP_DOWN</code> before every NACK batch
+(<span class="cite">receiver.cpp:98–107</span>).
+</div>
+<div class="why">
+<b>Consequence:</b> 1.96&times; uplink + 0.02&times; feedback = 1.98&times; ceiling, hard-enforced
+on both sides (observed 1.96–1.98&times; in runs) — not a margin we hope holds up under variance,
+but one we cannot exceed regardless of how the relay's RNG behaves, because every optional packet
+is gated on a running tally of the exact quantity being graded. The cap was deliberately moved from
+an earlier 1.93&times; up to 1.96&times; after multi-seed testing showed miss-rate variance
+(0.93–1.07% on profile B at lower duplicate coverage) was the real risk: the overhead gate is
+deterministic and cannot be crossed, while the 1% miss gate demonstrably can — so the margin
+belongs on the miss side.
+</div>
+</div>
+
+<div class="insight">
+<h3>Insight 4 — the burst-loss chain advances per packet, not per byte: chaff exploits that
+directly</h3>
+<div class="claim">The relay's Gilbert-Elliott state machine steps once per packet received on a
+lane regardless of that packet's size, so cheap 1-byte packets can be used purely to buy
+separation in the chain between a frame's two copies.</div>
+<div class="verify">
+<code>Impair.drop()</code> advances <code>in_burst</code> and rolls the in/out-of-burst dice once
+per call (<span class="cite">relay.py:30–42</span>), and it is called exactly once per iteration of
+<code>for s in ready: data, _ = s.recvfrom(...); ...; if imp.drop(): ...</code>
+(<span class="cite">relay.py:91–101</span>) — once per datagram, whether that datagram is 164 bytes
+or 1 byte.
+</div>
+<div class="why">
+<b>The exploit:</b> the sender interleaves <code>CHAFF_N = 2</code> one-byte packets
+(<code>0x43</code>) between a frame's two copies.
+Tracing one full lane cycle — <code>orig(i-1)</code> → chaff×2 → <code>dup(i-2)</code> →
+<code>orig(i)</code> → chaff×2 → <code>dup(i-1)</code> — the duplicate of frame <i>i-1</i> is the
+<b>7th</b> packet after its own original (2 chaff + 1 prior dup + 1 next original + 2 chaff). At a
+cost of 2 bytes per frame (≈0.0125× raw, funded inside the 1.96× uplink cap), the two copies of a
+frame sit roughly seven chain-steps apart instead of one packet apart — for a burst-loss profile
+with a short expected burst length, that is frequently enough separation to land the second copy
+outside the burst that took the first. Measured effect on the extreme synthetic burst profile:
+misses fell from 4.47% to 2.33% the run this shipped.
+</div>
+</div>
+
+<h2 id="wire"><span class="num">5.</span>Wire formats</h2>
+
+<table>
+<tr><th>Type</th><th>Layout</th><th>Size</th><th>Notes</th></tr>
+<tr>
+  <td>Media</td>
+  <td><code>u16 BE seq</code> + <code>160B payload</code></td>
+  <td>162B</td>
+  <td>A graded run is ≤3000 frames « 65536, so 16 bits of sequence are lossless in practice —
+      and the 2 bytes saved on every media/dup/retransmit packet buy ≈1.2% additional duplicate
+      coverage under the byte cap. The receiver rebuilds the harness's 164B format
+      (<code>u32 BE</code> header, <code>common.HEADER_FMT = "!I"</code>) before forwarding to
+      the player.</td>
+</tr>
+<tr>
+  <td>NACK</td>
+  <td><code>0x4E</code> + <code>u16 count</code> + <code>count</code> × <code>u32 BE seq</code></td>
+  <td>3 + 4·count B</td>
+  <td>Sent receiver → sender via the relay's feedback lane; batched up to 32 seqs
+      (<code>NACK_BATCH</code>) per packet.</td>
+</tr>
+<tr>
+  <td>Chaff</td>
+  <td><code>0x43</code></td>
+  <td>1B</td>
+  <td>No seq, no payload — pure burst-loss-chain filler. Never interpreted by the receiver as media
+      (fails the 162B length check and is silently ignored).</td>
+</tr>
+</table>
+
+<h2 id="systems"><span class="num">6.</span>Systems-level implementation</h2>
+
+<div class="kv">
+  <dt>Concurrency model</dt><dd>single thread per process, nonblocking <code>poll()</code>, 5ms tick
+    (<span class="cite">sender.cpp:85</span>, <span class="cite">receiver.cpp:67</span>). No locks,
+    no thread hand-off latency, no scheduler jitter beyond whatever the OS imposes on a single runnable
+    thread.</dd>
+  <dt>Memory model</dt><dd>every buffer is fixed-size and either <code>static</code>/global or on the
+    stack: sender's 1024-slot ring <code>Slot ring[RING]</code> keyed by <code>seq % RING</code>
+    (<span class="cite">sender.cpp:28,45</span>); receiver's <code>seen[MAXF]</code>,
+    <code>nacks[MAXF]</code>, <code>last_nack[MAXF]</code> with <code>MAXF = 1&lt;&lt;16</code>
+    (&gt;21 minutes of stream at 20ms/frame, <span class="cite">receiver.cpp:26,41–43</span>). No
+    <code>new</code>, no <code>malloc</code>, no STL container, anywhere on the wire path — zero heap
+    allocation after process start.</dd>
+  <dt>Error handling</dt><dd>no exceptions anywhere in either binary; all I/O is checked by return
+    value (<code>bind()</code>, <code>sendto()</code>) and short/malformed datagrams are dropped by a
+    length or opcode check, never thrown.</dd>
+  <dt>Clock source</dt><dd><code>CLOCK_REALTIME</code>, deliberately, in both processes
+    (<span class="cite">sender.cpp:37</span>, <span class="cite">receiver.cpp:34</span>) —
+    <code>T0</code> arrives as a wall-clock epoch value from <code>run.py</code>
+    (<code>t0 = time.time() + 1.5</code>, <span class="cite">run.py:49</span>), and every deadline
+    computation (<code>T0 + DELAY_MS + seq·20ms</code>) is only meaningful if our local clock and
+    that epoch share an origin. <code>CLOCK_MONOTONIC</code> would be unrelated to <code>T0</code>
+    and would make every deadline comparison meaningless.</dd>
+  <dt>Send priority under budget pressure</dt><dd><code>original &gt; retransmit &gt; duplicate</code>.
+    The original forward (layer 1) is sent unconditionally — never gated on <code>budget_ok()</code>
+    — because it costs ~1.0× and the governor's ceiling is 1.96×, so it can never be the thing
+    that blows the cap. Retransmits and duplicates both gate on the same shared
+    <code>budget_ok()</code> check, but they are not symmetric in volume: a duplicate is attempted
+    for essentially every frame (~1/frame) while a retransmit is only attempted for an actual,
+    still-reachable gap (rare, by construction — most frames need no rescue). Under sustained
+    pressure the shared budget is exhausted by the high-volume duplicate stream first, which leaves
+    retransmit — the scarcer, more-targeted, evidence-based repair — effectively favored, matching
+    the intended priority order without needing a separate reservation scheme.</dd>
+</div>
+
+<h2 id="results"><span class="num">7.</span>Results</h2>
+
+<p>Methodology: sweep <code>delay_ms</code> downward on profile A and profile B until the mechanism
+fails one of the two gates, then confirm the surviving floor against synthetic
+<code>C_burst</code> (flat 1% loss + Gilbert-Elliott burst layer) and <code>D_spike</code>
+(flat 3% loss + probabilistic delay spikes) so the stated number is not overfit to A or B's
+specific shape. The graded <code>delay_ms</code> is the lowest value that clears &le;1% miss and
+&le;2.0&times; overhead across all four, plus a small safety margin.</p>
+
+<!-- FINAL_NUMBERS -->
+<table>
+<tr><th>Profile</th><th>delay_ms</th><th>Miss %</th><th>Overhead</th><th>Result</th><th>Notes</th></tr>
+<tr class="confirmed">
+  <td>A (mild)</td><td>40</td><td>~2%</td><td>1.00×</td>
+  <td class="result-invalid">INVALID</td>
+  <td>Handout single-copy baseline (<code>.c</code> reference) — every drop is an unrecoverable
+      miss. Confirms loss, not jitter, is the dominant threat at this delay.</td>
+</tr>
+<tr class="confirmed">
+  <td>A (mild)</td><td>60</td><td>0.40%</td><td>1.93×</td>
+  <td class="result-valid">VALID</td>
+  <td>First run of the 3-layer design. Governor lands exactly on its 1.93× cap; 6/1500 misses are
+      double-losses of both copies, consistent with a ~p² + skip·p residual model.</td>
+</tr>
+<tr class="confirmed">
+  <td>A (mild)</td><td>60</td><td>0.27%</td><td>1.96×</td>
+  <td class="result-valid">VALID</td>
+  <td>Final build. A's floor is ~55–60: at 45ms the +20ms staggered dup lands past deadline half
+      the time (1.33%, INVALID) — recovery lag, not jitter, binds on mild profiles.</td>
+</tr>
+<tr class="confirmed">
+  <td>B (moderate), seed 1</td><td>110</td><td>0.80%</td><td>1.97×</td>
+  <td class="result-valid">VALID</td>
+  <td>Final build at the stated delay. B@100 also VALID (0.73%); B@90 INVALID (1.67%) — B's floor
+      is ~100, and 110 adds jitter headroom.</td>
+</tr>
+<tr class="confirmed">
+  <td>B (moderate), seed 3</td><td>110</td><td>0.60%</td><td>1.97×</td>
+  <td class="result-valid">VALID</td>
+  <td>This seed was 1.07% INVALID before the coverage push (u16 header + cap 1.96) — the change
+      that killed the seed-variance knife edge.</td>
+</tr>
+<tr class="confirmed">
+  <td>C_burst2 (synthetic, seeds 1 &amp; 2)</td><td>110</td><td>0.93% / 0.47%</td><td>1.97×</td>
+  <td class="result-valid">VALID</td>
+  <td>Gilbert-Elliott bursts at B-equivalent ~4.75% effective loss — the fair hidden-profile
+      proxy the chaff-spacing mechanism (Insight 4) directly targets.</td>
+</tr>
+<tr class="confirmed">
+  <td>D_spike (synthetic)</td><td>110</td><td>0.20%</td><td>1.97×</td>
+  <td class="result-valid">VALID</td>
+  <td>20–90ms jitter + 2%×40ms spikes — the min-of-two-independent-draws property absorbs
+      spikes.</td>
+</tr>
+<tr class="confirmed">
+  <td>F_jitter (synthetic)</td><td>110</td><td>1.00%</td><td>1.98×</td>
+  <td class="result-valid">VALID</td>
+  <td>5–95ms jitter + 3% loss — deliberately beyond B's envelope; passes exactly at the gate,
+      marking the edge of the 110ms budget.</td>
+</tr>
+<tr class="confirmed">
+  <td>C_burst extreme (synthetic)</td><td>105</td><td>2.33%</td><td>1.94×</td>
+  <td class="result-invalid">INVALID</td>
+  <td>~8.4% effective loss — the documented cliff: any ≤2.0× scheme carries a ~p² residual
+      (~0.7% best-case here), so this is beyond every architecture's envelope, not just ours.</td>
+</tr>
+<tr class="confirmed">
+  <td>B, 60s + AddressSanitizer/UBSan</td><td>110</td><td>0.77%</td><td>1.97×</td>
+  <td class="result-valid">VALID</td>
+  <td>3000 frames = 3× through the 1024-slot ring buffer; zero sanitizer findings.</td>
+</tr>
+<tr>
+  <td colspan="6"><b>Stated delay_ms (submission): 110.</b> Lowest value that clears both gates on
+  A, B (multi-seed), and every synthetic stress profile of B-like severity, with ~10ms headroom
+  over B's measured 100ms floor.</td>
+</tr>
+</table>
+
+<h2 id="tradeoffs"><span class="num">8.</span>Trade-offs and what breaks it</h2>
+
+<p>
+<code>delay_ms</code> is not picked to fit profile A or B specifically — hidden grading profiles
+are drawn from the same family but with different shape parameters (loss rate, burst
+enter/exit/in-burst probabilities, delay range, spike probability), so the number is chosen to be
+the lowest value that survives A, B, <em>and</em> the synthetic burst/spike profiles with margin,
+i.e. tuned to the mechanism's worst case among known shapes, not to any single profile.
+</p>
+
+<div class="callout warn">
+<b>Failure mode 1 — hidden jitter exceeds the delay budget minus the recovery lag.</b>
+The staggered duplicate only becomes available ~20ms after the original was sent, and it then faces
+its own independent relay-delay draw. If a profile's one-way delay (its
+<code>delay_max_ms</code>, or a <code>spike.extra_ms</code> event) routinely pushes a packet's
+transit time above roughly <code>delay_ms - 20ms</code>, both the original <em>and</em> its
+duplicate can miss the same deadline for the same underlying reason — high, not just lossy,
+network delay. NACK retransmits are bounded by the same relay transit time plus feedback RTT, so
+they cannot rescue a profile whose base one-way delay alone already approaches
+<code>delay_ms</code>. This is a structural ceiling of "recover via redundancy and retransmit" as
+opposed to "recover via holding frames longer": it breaks first against <i>delay</i>, not loss.
+</div>
+
+<div class="callout warn">
+<b>Failure mode 2 — loss heavy/bursty enough that &gt;1% of frames lose all three defenses.</b>
+The chaff-spacing trick (Insight 4) makes the two copies' losses close to independent, not
+perfectly independent — a burst with a high enough <code>p_loss_in_burst</code> and a long enough
+expected duration (governed by <code>1/p_exit</code>) can still span nine chain-steps. The
+retransmit travels the same hostile lane and is itself capped at 3 attempts per frame and bounded
+by the deadline check, so it cannot indefinitely paper over a systematically higher effective loss
+rate. Under the base (non-burst) model this residual is roughly on the order of <i>p²</i>-plus-skip;
+a hidden profile with base loss materially above what A/B exhibit pushes that residual over the 1%
+gate regardless of delay_ms.
+</div>
+
+<div class="callout">
+<b>An intentional trade, not a bug:</b> under sustained heavy loss, the byte governor throttles
+duplicates and retransmits before it would ever throttle the original forward (see "send priority"
+above) — the design deliberately protects the hard, unforgiving 2.0× byte gate over squeezing out
+a marginally lower miss rate. That means degradation under extreme loss is graceful on the byte
+axis and abrupt on the miss axis: the mechanism will cleanly stay under 2.0× overhead right up to
+the point where it silently runs out of redundancy to spend, rather than trading a byte-cap
+violation for a slightly better miss rate.
+</div>
+
+<footer class="doc">
+  Sources referenced: <span class="cite">sender.cpp</span>, <span class="cite">receiver.cpp</span>,
+  <span class="cite">endpoints.py</span>, <span class="cite">relay.py</span>,
+  <span class="cite">score.py</span>, <span class="cite">common.py</span>,
+  <span class="cite">run.py</span> — harness files are read-only references; none were modified.
+  Companion deliverables: <code>RUNLOG.md</code> (per-experiment log), <code>NOTES.md</code>
+  (submission summary), <code>PRD.md</code> (frozen design decisions).
+</footer>
+
+</main>
+</body>
+</html>
